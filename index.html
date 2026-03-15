@@ -265,7 +265,7 @@
 
     <script>
         const GRID_SIZE = 8;
-        // Much wider variety of shapes including complex ones
+        // Expanded shapes including diagonal-only connections
         const SHAPES = [
             [[1]], // Dot
             [[1,1]], [[1],[1]], // 2-lines
@@ -277,7 +277,15 @@
             [[1,1],[1,0],[1,0]], [[1,1,1],[0,0,1]], [[0,1],[0,1],[1,1]], [[1,0,0],[1,1,1]], // L-shapes
             [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0],[1,1],[0,1]], [[0,1],[1,1],[1,0]], // Z-shapes
             [[1,1,1],[1,0,0],[1,0,0]], // Big L
-            [[1,1,1],[0,0,1],[0,0,1]]  // Big L reverse
+            [[1,1,1],[0,0,1],[0,0,1]], // Big L reverse
+            
+            // DIAGONAL BLOCKS (Disconnected but part of one piece)
+            [[1,0],[0,1]], // Simple Diagonal (2 blocks)
+            [[0,1],[1,0]], // Simple Diagonal reverse
+            [[1,0,1],[0,1,0],[1,0,1]], // X-shape diagonal (5 blocks)
+            [[1,0,0],[0,1,0],[0,0,1]], // 3-block slash diagonal
+            [[0,0,1],[0,1,0],[1,0,0]], // 3-block backslash diagonal
+            [[1,1],[0,0],[1,1]]  // Parallel lines (diagonal offset)
         ];
 
         let grid = [];
@@ -325,7 +333,6 @@
             scoreEl.textContent = '0';
             overlay.style.display = 'none';
             
-            // Seed more initial blocks to fill screen
             seedInitialBlocks();
 
             renderGrid();
@@ -414,7 +421,6 @@
             };
 
             function updateDragPos(element, x, y) {
-                // High precision: offset piece above finger so it is never covered
                 const offset = 120; 
                 element.style.left = `${x}px`;
                 element.style.top = `${y - offset}px`;
