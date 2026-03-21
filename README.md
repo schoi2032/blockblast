@@ -1,3 +1,3 @@
 # BlockBlast
-# The Perfect Game for Simple Breaks
-# Coming Soon as an extension!
+The perfect game for simple breaks; enjoyable for all ages
+COMING SOON AS AN EXTENSION!
