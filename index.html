@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BlockBlast</title>
+    <title>Block Blast Pro</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -275,19 +275,20 @@
     <script>
         const GRID_SIZE = 8;
         
+        // Piece weights adjusted: 3x3 and X are now weight 2 (same as low-freq magic)
         const SHAPES = [
             { s: [[1]], w: 10 },
             { s: [[1,1]], w: 10 }, { s: [[1],[1]], w: 10 },
             { s: [[1,1,1]], w: 8 }, { s: [[1],[1],[1]], w: 8 },
             { s: [[1,1],[1,1]], w: 8 }, 
             { s: [[1,1,1,1]], w: 5 }, { s: [[1],[1],[1],[1]], w: 5 },
-            { s: [[1,1,1],[1,1,1],[1,1,1]], w: 2 },
+            { s: [[1,1,1],[1,1,1],[1,1,1]], w: 2 }, // Big 3x3 square
             { s: [[1,1,1],[0,1,0]], w: 5 }, { s: [[1,0],[1,1],[1,0]], w: 5 },
             { s: [[1,1],[1,0],[1,0]], w: 5 }, { s: [[1,1,1],[0,0,1]], w: 5 },
             { s: [[1,1,0],[0,1,1]], w: 4 }, { s: [[0,1,1],[1,1,0]], w: 4 },
             { s: [[1,0],[0,1]], w: 2 }, 
             { s: [[0,1],[1,0]], w: 2 },
-            { s: [[1,0,1],[0,1,0],[1,0,1]], w: 1 },
+            { s: [[1,0,1],[0,1,0],[1,0,1]], w: 2 }, // X shape
             { s: [[1,0,0],[0,1,0],[0,0,1]], w: 2 },
             { s: [[0,0,1],[0,1,0],[1,0,0]], w: 2 }
         ];
@@ -376,7 +377,6 @@
             return SHAPES[0].s;
         }
 
-        // Logic check to ensure ALL three pieces are placeable in some order
         function canPlaceAll(shapes) {
             const currentGrid = grid.map(row => [...row]);
             
@@ -388,7 +388,6 @@
                 for (let r = 0; r < GRID_SIZE; r++) {
                     for (let c = 0; c < GRID_SIZE; c++) {
                         if (canFitOnCustomGrid(currentGrid, shape, r, c, isMagic)) {
-                            // Place
                             const saved = [];
                             shape.forEach((row, i) => {
                                 row.forEach((val, j) => {
@@ -400,8 +399,6 @@
                             });
                             
                             if (solve(index + 1)) return true;
-                            
-                            // Backtrack
                             saved.forEach(node => currentGrid[node.r][node.c] = node.old);
                         }
                     }
@@ -430,14 +427,14 @@
 
             while (attempts < 200) {
                 tempDock = [];
-                const isMagicTurn = Math.random() < 0.05;
+                // Magic spawn rate is roughly 1 in 20 turns (5%)
+                const isMagicTurn = Math.random() < 0.05; 
                 for (let i = 0; i < 3; i++) {
                     const shape = (isMagicTurn && i === 0) ? [[1]] : getRandomShape();
                     const color = (isMagicTurn && i === 0) ? 'magic' : Math.floor(Math.random() * 8) + 1;
                     tempDock.push({ shape, color });
                 }
 
-                // IMPROVED: Check if there's a valid way to place ALL THREE
                 if (canPlaceAll(tempDock)) break;
                 attempts++;
             }
@@ -590,16 +587,33 @@
 
         function checkBoard() {
             let rows = [], cols = [];
-            for (let r = 0; r < GRID_SIZE; r++) if (grid[r].every(v => v !== 0)) rows.push(r);
+            let magicInvolved = false;
+
+            // Check rows
+            for (let r = 0; r < GRID_SIZE; r++) {
+                if (grid[r].every(v => v !== 0)) {
+                    rows.push(r);
+                    if (grid[r].some(v => v === -1)) magicInvolved = true;
+                }
+            }
+            // Check cols
             for (let c = 0; c < GRID_SIZE; c++) {
                 let full = true;
-                for (let r = 0; r < GRID_SIZE; r++) if (grid[r][c] === 0) full = false;
-                if (full) cols.push(c);
+                let colHasMagic = false;
+                for (let r = 0; r < GRID_SIZE; r++) {
+                    if (grid[r][c] === 0) full = false;
+                    if (grid[r][c] === -1) colHasMagic = true;
+                }
+                if (full) {
+                    cols.push(c);
+                    if (colHasMagic) magicInvolved = true;
+                }
             }
 
             if (rows.length || cols.length) {
                 comboCount++;
-                showComboUI(rows.length + cols.length);
+                showComboUI(rows.length + cols.length, magicInvolved);
+                
                 rows.forEach(r => {
                     for(let c=0; c<GRID_SIZE; c++) animateClear(r, c);
                     grid[r] = Array(GRID_SIZE).fill(0);
@@ -610,7 +624,11 @@
                         grid[r][c] = 0;
                     }
                 });
-                addScore((rows.length + cols.length) * 100 * comboCount);
+
+                let blastScore = (rows.length + cols.length) * 100 * comboCount;
+                if (magicInvolved) blastScore *= 2; // MAGIC MULTIPLIER
+                
+                addScore(blastScore);
                 setTimeout(renderGrid, 450);
             } else {
                 comboCount = 0;
@@ -633,10 +651,15 @@
             }
         }
 
-        function showComboUI(lines) {
+        function showComboUI(lines, magic) {
             const text = document.createElement('div');
             text.className = 'combo-text';
-            text.textContent = comboCount > 1 ? `COMBO x${comboCount}!` : (lines > 1 ? 'AWESOME!' : 'BLAST!');
+            let label = comboCount > 1 ? `COMBO x${comboCount}!` : (lines > 1 ? 'AWESOME!' : 'BLAST!');
+            if (magic) {
+                label = "✨ DOUBLE SCORE! ✨";
+                text.style.color = "#ff00ff";
+            }
+            text.textContent = label;
             text.style.left = '50%'; text.style.top = '45%';
             document.body.appendChild(text);
             setTimeout(() => text.remove(), 900);
