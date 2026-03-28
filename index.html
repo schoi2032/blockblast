@@ -41,7 +41,7 @@
             justify-content: space-between;
             height: 100vh;
             overflow: hidden;
-            padding: 20px 0;
+            padding: 15px 0;
         }
 
         #ui-layer {
@@ -103,8 +103,8 @@
             gap: 8px;
             width: 92vw;
             height: 92vw;
-            max-width: 480px;
-            max-height: 480px;
+            max-width: 460px;
+            max-height: 460px;
             box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
         }
 
@@ -146,19 +146,59 @@
             100% { transform: scale(0); opacity: 0; }
         }
 
+        #bottom-area {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            max-width: 600px;
+            gap: 15px;
+            padding: 0 10px;
+        }
+
+        #store-container {
+            width: 110px;
+            height: 110px;
+            background: rgba(255,255,255,0.05);
+            border: 2px dashed var(--accent-color);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+
+        #store-container.highlight {
+            background: rgba(56, 189, 248, 0.25);
+            border-style: solid;
+            transform: scale(1.05);
+        }
+
+        #store-container::before {
+            content: 'HOLD';
+            position: absolute;
+            top: -22px;
+            font-size: 12px;
+            font-weight: 900;
+            color: var(--accent-color);
+            letter-spacing: 1px;
+        }
+
         #dock {
             display: flex;
             justify-content: space-around;
             align-items: center;
-            width: 100%;
-            max-width: 500px;
-            height: 160px;
-            padding-bottom: 20px;
+            flex: 1;
+            max-width: 400px;
+            height: 140px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 24px;
         }
 
         .piece-slot {
-            width: 120px;
-            height: 120px;
+            width: 100px;
+            height: 100px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -167,9 +207,10 @@
         .piece-grid {
             display: grid;
             gap: 3px;
-            transform: scale(0.6);
-            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transform: scale(0.5);
+            transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
             cursor: grab;
+            touch-action: none;
         }
 
         .block {
@@ -192,9 +233,11 @@
         }
 
         .dragging {
-            position: fixed;
+            position: fixed !important;
             pointer-events: none;
             z-index: 1000;
+            transform: translate(-50%, -50%) scale(1.3) !important;
+            transition: none !important;
         }
 
         #overlay {
@@ -212,7 +255,7 @@
             position: absolute;
             pointer-events: none;
             font-weight: 900;
-            font-size: 48px;
+            font-size: 40px;
             color: #fbbf24;
             text-shadow: 0 10px 20px rgba(0,0,0,0.4);
             animation: combo-up 0.9s ease-out forwards;
@@ -260,10 +303,13 @@
 
     <div id="grid-container"></div>
 
-    <div id="dock">
-        <div class="piece-slot" id="slot-0"></div>
-        <div class="piece-slot" id="slot-1"></div>
-        <div class="piece-slot" id="slot-2"></div>
+    <div id="bottom-area">
+        <div id="store-container" class="piece-slot"></div>
+        <div id="dock">
+            <div class="piece-slot" id="slot-0"></div>
+            <div class="piece-slot" id="slot-1"></div>
+            <div class="piece-slot" id="slot-2"></div>
+        </div>
     </div>
 
     <div id="overlay">
@@ -275,20 +321,19 @@
     <script>
         const GRID_SIZE = 8;
         
-        // Piece weights adjusted: 3x3 and X are now weight 2 (same as low-freq magic)
         const SHAPES = [
             { s: [[1]], w: 10 },
             { s: [[1,1]], w: 10 }, { s: [[1],[1]], w: 10 },
             { s: [[1,1,1]], w: 8 }, { s: [[1],[1],[1]], w: 8 },
             { s: [[1,1],[1,1]], w: 8 }, 
             { s: [[1,1,1,1]], w: 5 }, { s: [[1],[1],[1],[1]], w: 5 },
-            { s: [[1,1,1],[1,1,1],[1,1,1]], w: 2 }, // Big 3x3 square
+            { s: [[1,1,1],[1,1,1],[1,1,1]], w: 2 }, 
             { s: [[1,1,1],[0,1,0]], w: 5 }, { s: [[1,0],[1,1],[1,0]], w: 5 },
             { s: [[1,1],[1,0],[1,0]], w: 5 }, { s: [[1,1,1],[0,0,1]], w: 5 },
             { s: [[1,1,0],[0,1,1]], w: 4 }, { s: [[0,1,1],[1,1,0]], w: 4 },
             { s: [[1,0],[0,1]], w: 2 }, 
             { s: [[0,1],[1,0]], w: 2 },
-            { s: [[1,0,1],[0,1,0],[1,0,1]], w: 2 }, // X shape
+            { s: [[1,0,1],[0,1,0],[1,0,1]], w: 2 }, 
             { s: [[1,0,0],[0,1,0],[0,0,1]], w: 2 },
             { s: [[0,0,1],[0,1,0],[1,0,0]], w: 2 }
         ];
@@ -297,9 +342,11 @@
         let score = 0;
         let best = localStorage.getItem('bb_best_mega') || 0;
         let dockPieces = [null, null, null];
+        let storedPiece = null;
         let comboCount = 0;
 
         const gridEl = document.getElementById('grid-container');
+        const storeEl = document.getElementById('store-container');
         const scoreEl = document.getElementById('score');
         const bestEl = document.getElementById('best');
         const overlay = document.getElementById('overlay');
@@ -346,8 +393,10 @@
             grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
             score = 0;
             comboCount = 0;
+            storedPiece = null;
             scoreEl.textContent = '0';
             overlay.style.display = 'none';
+            storeEl.innerHTML = '';
             seedInitialBlocks();
             renderGrid();
             spawnDock();
@@ -377,86 +426,18 @@
             return SHAPES[0].s;
         }
 
-        function canPlaceAll(shapes) {
-            const currentGrid = grid.map(row => [...row]);
-            
-            function solve(index) {
-                if (index === shapes.length) return true;
-                const shape = shapes[index].shape;
-                const isMagic = shapes[index].color === 'magic';
-
-                for (let r = 0; r < GRID_SIZE; r++) {
-                    for (let c = 0; c < GRID_SIZE; c++) {
-                        if (canFitOnCustomGrid(currentGrid, shape, r, c, isMagic)) {
-                            const saved = [];
-                            shape.forEach((row, i) => {
-                                row.forEach((val, j) => {
-                                    if (val) {
-                                        saved.push({r: r+i, c: c+j, old: currentGrid[r+i][c+j]});
-                                        currentGrid[r+i][c+j] = 1; 
-                                    }
-                                });
-                            });
-                            
-                            if (solve(index + 1)) return true;
-                            saved.forEach(node => currentGrid[node.r][node.c] = node.old);
-                        }
-                    }
-                }
-                return false;
-            }
-            return solve(0);
-        }
-
-        function canFitOnCustomGrid(g, shape, r, c, isMagic) {
-            for (let i = 0; i < shape.length; i++) {
-                for (let j = 0; j < shape[i].length; j++) {
-                    if (shape[i][j]) {
-                        const nr = r + i, nc = c + j;
-                        if (nr < 0 || nr >= GRID_SIZE || nc < 0 || nc >= GRID_SIZE) return false;
-                        if (!isMagic && g[nr][nc] !== 0) return false;
-                    }
-                }
-            }
-            return true;
-        }
-
         function spawnDock() {
-            let attempts = 0;
-            let tempDock = [];
-
-            while (attempts < 200) {
-                tempDock = [];
-                // Magic spawn rate is roughly 1 in 20 turns (5%)
-                const isMagicTurn = Math.random() < 0.05; 
-                for (let i = 0; i < 3; i++) {
-                    const shape = (isMagicTurn && i === 0) ? [[1]] : getRandomShape();
-                    const color = (isMagicTurn && i === 0) ? 'magic' : Math.floor(Math.random() * 8) + 1;
-                    tempDock.push({ shape, color });
-                }
-
-                if (canPlaceAll(tempDock)) break;
-                attempts++;
-            }
-
             for (let i = 0; i < 3; i++) {
                 const slot = document.getElementById(`slot-${i}`);
                 slot.innerHTML = '';
-                const { shape, color } = tempDock[i];
+                const isMagicTurn = Math.random() < 0.05; 
+                const shape = isMagicTurn ? [[1]] : getRandomShape();
+                const color = isMagicTurn ? 'magic' : Math.floor(Math.random() * 8) + 1;
                 const pieceEl = createPieceUI(shape, color);
                 slot.appendChild(pieceEl);
                 dockPieces[i] = { shape, color, element: pieceEl };
-                attachDrag(pieceEl, i);
+                attachDrag(pieceEl, i, false);
             }
-        }
-
-        function checkFitAnywhere(shape) {
-            for (let r = 0; r < GRID_SIZE; r++) {
-                for (let c = 0; c < GRID_SIZE; c++) {
-                    if (canFit(shape, r, c)) return true;
-                }
-            }
-            return false;
         }
 
         function createPieceUI(shape, color) {
@@ -474,69 +455,159 @@
             return container;
         }
 
-        function attachDrag(el, index) {
+        function isPointInRect(px, py, rect) {
+            return px > rect.left && px < rect.right && py > rect.top && py < rect.bottom;
+        }
+
+        function attachDrag(el, index, isStored) {
             let isDragging = false;
-            const start = (e) => {
+            
+            const startHandler = (e) => {
                 isDragging = true;
                 const t = e.touches ? e.touches[0] : e;
                 el.classList.add('dragging');
-                updateDragPos(el, t.clientX, t.clientY);
-                handleHover(t.clientX, t.clientY, index);
+                moveHandler(e);
+                if(e.cancelable) e.preventDefault();
             };
-            const move = (e) => {
+
+            const moveHandler = (e) => {
                 if (!isDragging) return;
                 const t = e.touches ? e.touches[0] : e;
-                updateDragPos(el, t.clientX, t.clientY);
-                handleHover(t.clientX, t.clientY, index);
+                
+                // Visual drag position
+                el.style.left = `${t.clientX}px`;
+                el.style.top = `${t.clientY - 100}px`;
+                
+                const piece = isStored ? storedPiece : dockPieces[index];
+                if (piece) {
+                    const pos = getGridPos(t.clientX, t.clientY, piece.shape);
+                    clearGhosts();
+                    if (!isNaN(pos.r) && !isNaN(pos.c) && canFit(piece.shape, pos.r, pos.c, piece.color === 'magic')) {
+                        showGhost(piece.shape, pos.r, pos.c, piece.color);
+                    }
+
+                    // Check if center of piece is in Hold box
+                    const sRect = storeEl.getBoundingClientRect();
+                    // We check the actual mouse/touch point as the "center" of intent
+                    const isOver = isPointInRect(t.clientX, t.clientY - 50, sRect); 
+                    storeEl.classList.toggle('highlight', isOver && !isStored);
+                }
             };
-            const end = (e) => {
+
+            const endHandler = (e) => {
                 if (!isDragging) return;
                 isDragging = false;
                 el.classList.remove('dragging');
-                el.style.left = ''; el.style.top = ''; el.style.transform = '';
+                el.style.left = ''; el.style.top = ''; 
+                storeEl.classList.remove('highlight');
+                
                 const t = e.changedTouches ? e.changedTouches[0] : e;
-                if (attemptPlace(t.clientX, t.clientY, index)) {
-                    el.remove();
-                    dockPieces[index] = null;
+                const piece = isStored ? storedPiece : dockPieces[index];
+                
+                if (!piece) {
+                    clearGhosts();
+                    return;
+                }
+
+                // Swap if intent point (adjusted touch/mouse) is inside hold box
+                const sRect = storeEl.getBoundingClientRect();
+                const isOverHold = isPointInRect(t.clientX, t.clientY - 50, sRect);
+                
+                if (!isStored && isOverHold) {
+                    swapStorage(index);
+                } 
+                else if (attemptPlace(t.clientX, t.clientY, piece)) {
+                    if (isStored) {
+                        storedPiece = null;
+                        storeEl.innerHTML = '';
+                    } else {
+                        el.remove();
+                        dockPieces[index] = null;
+                    }
                     if (dockPieces.every(p => p === null)) spawnDock();
                     checkBoard();
                 }
                 clearGhosts();
             };
-            function updateDragPos(element, x, y) {
-                element.style.left = `${x}px`;
-                element.style.top = `${y - 120}px`;
-                element.style.transform = `translate(-50%, -50%) scale(1.3)`;
+
+            el.onmousedown = startHandler;
+            el.ontouchstart = startHandler;
+
+            const moveListener = (e) => moveHandler(e);
+            const endListener = (e) => endHandler(e);
+
+            window.addEventListener('mousemove', moveListener);
+            window.addEventListener('touchmove', moveListener, {passive: false});
+            window.addEventListener('mouseup', endListener);
+            window.addEventListener('touchend', endListener);
+
+            el._cleanupListeners = () => {
+                window.removeEventListener('mousemove', moveListener);
+                window.removeEventListener('touchmove', moveListener);
+                window.removeEventListener('mouseup', endListener);
+                window.removeEventListener('touchend', endListener);
+            };
+        }
+
+        function swapStorage(index) {
+            const pieceToStore = dockPieces[index];
+            const prevStored = storedPiece;
+
+            if (pieceToStore && pieceToStore.element && pieceToStore.element._cleanupListeners) {
+                pieceToStore.element._cleanupListeners();
             }
-            el.addEventListener('mousedown', start);
-            el.addEventListener('touchstart', start, {passive: false});
-            window.addEventListener('mousemove', move);
-            window.addEventListener('touchmove', move, {passive: false});
-            window.addEventListener('mouseup', end);
-            window.addEventListener('touchend', end);
+            if (prevStored && prevStored.element && prevStored.element._cleanupListeners) {
+                prevStored.element._cleanupListeners();
+            }
+
+            document.getElementById(`slot-${index}`).innerHTML = '';
+            storeEl.innerHTML = '';
+
+            storedPiece = { ...pieceToStore };
+            const newStoredUI = createPieceUI(storedPiece.shape, storedPiece.color);
+            newStoredUI.style.opacity = '0';
+            newStoredUI.style.transform = 'scale(0.2)';
+            storeEl.appendChild(newStoredUI);
+            storedPiece.element = newStoredUI;
+            attachDrag(newStoredUI, -1, true);
+
+            requestAnimationFrame(() => {
+                newStoredUI.style.transition = 'all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+                newStoredUI.style.opacity = '1';
+                newStoredUI.style.transform = 'scale(0.5)';
+            });
+
+            if (prevStored) {
+                dockPieces[index] = { ...prevStored };
+                const newDockUI = createPieceUI(prevStored.shape, prevStored.color);
+                newDockUI.style.opacity = '0';
+                document.getElementById(`slot-${index}`).appendChild(newDockUI);
+                dockPieces[index].element = newDockUI;
+                attachDrag(newDockUI, index, false);
+                requestAnimationFrame(() => {
+                    newDockUI.style.opacity = '1';
+                    newDockUI.style.transform = 'scale(0.5)';
+                });
+            } else {
+                dockPieces[index] = null;
+                if (dockPieces.every(p => p === null)) spawnDock();
+            }
         }
 
         function getGridPos(x, y, shape) {
             const rect = gridEl.getBoundingClientRect();
             const cellSize = rect.width / GRID_SIZE;
-            const targetY = y - 120;
-            const targetX = x;
-            const gridX = targetX - rect.left - (shape[0].length * cellSize / 2);
+            const targetY = y - 100; 
+            const gridX = x - rect.left - (shape[0].length * cellSize / 2);
             const gridY = targetY - rect.top - (shape.length * cellSize / 2);
-            return { r: Math.round(gridY / cellSize), c: Math.round(gridX / cellSize) };
-        }
-
-        function handleHover(x, y, index) {
-            clearGhosts();
-            const piece = dockPieces[index];
-            if (!piece) return;
-            const pos = getGridPos(x, y, piece.shape);
-            if (canFit(piece.shape, pos.r, pos.c, piece.color === 'magic')) {
-                showGhost(piece.shape, pos.r, pos.c, piece.color);
-            }
+            return { 
+                r: Math.round(gridY / cellSize), 
+                c: Math.round(gridX / cellSize) 
+            };
         }
 
         function canFit(shape, r, c, isMagic = false) {
+            if (isNaN(r) || isNaN(c)) return false;
             for (let i = 0; i < shape.length; i++) {
                 for (let j = 0; j < shape[i].length; j++) {
                     if (shape[i][j]) {
@@ -562,14 +633,12 @@
 
         function clearGhosts() {
             document.querySelectorAll('.cell.ghost').forEach(c => {
-                const r = c.id.split('-')[1], col = c.id.split('-')[2];
-                const val = grid[r][col];
-                c.className = 'cell' + (val ? (val === -1 ? ' filled color-magic' : ' filled color-' + val) : '');
+                c.classList.remove('ghost', 'color-1', 'color-2', 'color-3', 'color-4', 'color-5', 'color-6', 'color-7', 'color-8', 'color-magic');
             });
         }
 
-        function attemptPlace(x, y, index) {
-            const piece = dockPieces[index];
+        function attemptPlace(x, y, piece) {
+            if (!piece) return false;
             const pos = getGridPos(x, y, piece.shape);
             const isMagic = piece.color === 'magic';
             if (canFit(piece.shape, pos.r, pos.c, isMagic)) {
@@ -589,14 +658,12 @@
             let rows = [], cols = [];
             let magicInvolved = false;
 
-            // Check rows
             for (let r = 0; r < GRID_SIZE; r++) {
                 if (grid[r].every(v => v !== 0)) {
                     rows.push(r);
                     if (grid[r].some(v => v === -1)) magicInvolved = true;
                 }
             }
-            // Check cols
             for (let c = 0; c < GRID_SIZE; c++) {
                 let full = true;
                 let colHasMagic = false;
@@ -626,7 +693,7 @@
                 });
 
                 let blastScore = (rows.length + cols.length) * 100 * comboCount;
-                if (magicInvolved) blastScore *= 2; // MAGIC MULTIPLIER
+                if (magicInvolved) blastScore *= 2; 
                 
                 addScore(blastScore);
                 setTimeout(renderGrid, 450);
@@ -634,13 +701,26 @@
                 comboCount = 0;
             }
 
-            let anyPossible = false;
-            dockPieces.forEach(p => {
-                if (!p) return;
-                if (p.color === 'magic' || checkFitAnywhere(p.shape)) anyPossible = true;
-            });
+            setTimeout(() => {
+                let anyPossible = false;
+                const currentPieces = [...dockPieces, storedPiece].filter(p => p !== null);
+                for (let p of currentPieces) {
+                    if (p.color === 'magic' || checkFitAnywhere(p.shape)) {
+                        anyPossible = true;
+                        break;
+                    }
+                }
+                if (!anyPossible && currentPieces.length > 0) endGame();
+            }, 500);
+        }
 
-            if (!anyPossible && dockPieces.some(p => p !== null)) endGame();
+        function checkFitAnywhere(shape) {
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (canFit(shape, r, c)) return true;
+                }
+            }
+            return false;
         }
 
         function animateClear(r, c) {
